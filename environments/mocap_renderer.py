@@ -516,7 +516,8 @@ class MultiMocapCharacters:
 
                 link.set_position(pos, orn)
 
-            self.heads[index].set_position(0.5 * (xyzs[4] - xyzs[3]) + xyzs[4])
+            # self.heads[index].set_position(0.5 * (xyzs[4] - xyzs[3]) + xyzs[4]) # refactored
+            self.heads[index].set_position(xyzs[16])
 
         self._p.configureDebugVisualizer(pb.COV_ENABLE_RENDERING, 1)
 

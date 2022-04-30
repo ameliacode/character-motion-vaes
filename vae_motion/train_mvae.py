@@ -43,7 +43,11 @@ class StatsLogger:
         rm, rs = divmod(remaining, 60)
 
         if self.progress_format is None:
-            time_format = "%{:d}dm %02ds".format(int(np.log10(rm) + 1))
+            try:
+                time_format = "%{:d}dm %02ds".format(int(np.log10(rm) + 1))
+            except:
+                rm = 1.0
+                time_format = "%{:d}dm %02ds".format(int(np.log10(rm) + 1))
             perc_format = "%{:d}d %5.1f%%".format(int(np.log10(self.num_epochs) + 1))
             self.progress_format = f"{time_format} (- {time_format}) ({perc_format})"
 
