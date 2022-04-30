@@ -36,7 +36,7 @@ class PBLMocapViewer:
         x_ind=None,
         y_ind=None,
         z_ind=None,
-        target_fps=30,
+        target_fps=120, # Refectored
         use_params=True,
         camera_tracking=True,
     ):
