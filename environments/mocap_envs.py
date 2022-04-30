@@ -83,15 +83,15 @@ class EnvBase(gym.Env):
 
         # 4 and 7 are height for right and left toes respectively
         # y-axis in the data, but z-axis in the env
-        self.foot_xy_ind = torch.LongTensor([[3, 5], [6, 8]])
-        self.foot_z_ind = torch.LongTensor([4, 7])
+        self.foot_xy_ind = torch.LongTensor([[30, 32], [15, 17]]) # joint index
+        self.foot_z_ind = torch.LongTensor([31, 16])
         self.contact_threshold = 0.03 * METER2FOOT
         self.foot_pos_history = torch.zeros((self.num_parallel, 2, 6)).to(self.device)
 
-        indices = torch.arange(0, 69).long().to(self.device)
-        x_indices = indices[slice(3, 69, 3)]
-        y_indices = indices[slice(4, 69, 3)]
-        z_indices = indices[slice(5, 69, 3)]
+        indices = torch.arange(0, 96).long().to(self.device)
+        x_indices = indices[slice(3, 96, 3)]
+        y_indices = indices[slice(4, 96, 3)]
+        z_indices = indices[slice(5, 96, 3)]
         self.joint_indices = (x_indices, y_indices, z_indices)
 
         if self.is_rendered:

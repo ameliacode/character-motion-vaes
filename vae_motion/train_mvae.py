@@ -2,8 +2,11 @@ import copy
 import os
 import time
 from types import SimpleNamespace
+from pathlib import Path
 
-current_dir = os.path.dirname(os.path.realpath(__file__))
+# current_dir = os.path.dirname(os.path.realpath(__file__))
+# parent_dir = os.path.dirname(current_dir)
+current_dir = str(Path(__file__).resolve().parents[0])
 parent_dir = os.path.dirname(current_dir)
 os.sys.path.append(parent_dir)
 
@@ -124,7 +127,7 @@ def main():
         num_future_predictions=1,
         num_steps_per_rollout=8,
         kl_beta=1.0,
-        load_saved_model=True,
+        load_saved_model=False,
     )
 
     # learning parameters
@@ -138,7 +141,8 @@ def main():
 
     raw_data = np.load(args.mocap_file)
     mocap_data = torch.from_numpy(raw_data["data"]).float().to(args.device)
-    end_indices = raw_data["end_indices"]
+    end_indices = raw_data["end_indices"] - 1 # T pose discarded
+    # print(len(mocap_data), end_indices)
 
     max = mocap_data.max(dim=0)[0]
     min = mocap_data.min(dim=0)[0]
@@ -168,17 +172,18 @@ def main():
     # bad indices are ones that has no required next frames
     # need to take account of num_steps_per_rollout and num_future_predictions
     bad_indices = np.sort(
-        np.concatenate(
-            [
+        np.concatenate( # zero-dimension error
+            np.array([
                 end_indices - i
                 for i in range(
                     args.num_steps_per_rollout
                     + (args.num_condition_frames - 1)
                     + (args.num_future_predictions - 1)
                 )
-            ]
+            ]), axis=None
         )
     )
+
     all_indices = np.arange(batch_size)
     good_masks = np.isin(all_indices, bad_indices, assume_unique=True, invert=True)
     selectable_indices = all_indices[good_masks]
@@ -192,20 +197,22 @@ def main():
         args.num_experts,
     ).to(args.device)
 
+    pose_vae_path = str(Path(current_dir) / "models")
+
     if isinstance(pose_vae, PoseVAE):
-        pose_vae_path = "posevae_c{}_l{}.pt".format(
+        pose_vae_path += "/posevae_c{}_l{}.pt".format(
             args.num_condition_frames, args.latent_size
         )
     elif isinstance(pose_vae, PoseMixtureVAE):
-        pose_vae_path = "posevae_c{}_e{}_l{}.pt".format(
+        pose_vae_path += "/posevae_c{}_e{}_l{}.pt".format(
             args.num_condition_frames, args.num_experts, args.latent_size
         )
     elif isinstance(pose_vae, PoseMixtureSpecialistVAE):
-        pose_vae_path = "posevae_c{}_s{}_l{}.pt".format(
+        pose_vae_path += "/posevae_c{}_s{}_l{}.pt".format(
             args.num_condition_frames, args.num_experts, args.latent_size
         )
     elif isinstance(pose_vae, PoseVQVAE):
-        pose_vae_path = "posevae_c{}_n{}_l{}.pt".format(
+        pose_vae_path += "/posevae_c{}_n{}_l{}.pt".format(
             args.num_condition_frames, args.num_embeddings, args.latent_size
         )
 
