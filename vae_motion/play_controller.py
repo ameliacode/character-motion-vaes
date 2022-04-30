@@ -109,7 +109,7 @@ if __name__ == "__main__":
         type=str,
         default="TimedTargetEnv-v0",
         required=False,
-        help="Envrionment name",
+        help="Environment name",
     )
     parser.add_argument(
         "--con",
