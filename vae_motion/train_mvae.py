@@ -3,6 +3,7 @@ import os
 import time
 from types import SimpleNamespace
 from pathlib import Path
+import argparse
 
 # current_dir = os.path.dirname(os.path.realpath(__file__))
 # parent_dir = os.path.dirname(current_dir)
@@ -118,21 +119,90 @@ def feed_vae(pose_vae, ground_truth, condition, future_weights):
 
 def main():
     env_path = os.path.join(parent_dir, "environments")
-
-    # setup parameters
-    args = SimpleNamespace(
-        device="cuda:0" if torch.cuda.is_available() else "cpu",
-        mocap_file=os.path.join(env_path, "mocap.npz"),
-        norm_mode="zscore",
-        latent_size=32,
-        num_embeddings=12,
-        num_experts=6,
-        num_condition_frames=1,
-        num_future_predictions=1,
-        num_steps_per_rollout=8,
-        kl_beta=1.0,
-        load_saved_model=False,
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda:0" if torch.cuda.is_available() else "cpu",
+        required=False,
     )
+    parser.add_argument(
+        "--mocap_file",
+        type=str,
+        default=os.path.join(env_path, "mocap.npz"),
+        required=False,
+    )
+    parser.add_argument(
+        "--norm_mode",
+        type=str,
+        default="zscore",
+        required=False,
+    )
+    parser.add_argument(
+        "--latent_size",
+        type=int,
+        default=32,
+        required=False,
+    )
+    parser.add_argument(
+        "--num_embeddings",
+        type=int,
+        default=12,
+        required=False,
+    )
+    parser.add_argument(
+        "--num_experts",
+        type=int,
+        default=6,
+        required=False
+    )
+    parser.add_argument(
+        "--num_condition_frames",
+        type=int,
+        default=1,
+        required=False
+    )
+    parser.add_argument(
+        "--num_future_predictions",
+        type=int,
+        default=1,
+        required=False
+    )
+    parser.add_argument(
+        "--num_steps_per_rollout",
+        type=int,
+        default=8,
+        required=False
+    )
+    parser.add_argument(
+        "--kl_beta",
+        type=float,
+        default=1.0,
+        required=False
+    )
+    parser.add_argument(
+        "--load_saved_model",
+        type=bool,
+        default=False,
+        required=False
+    )
+
+    # # setup parameters
+    # args = SimpleNamespace(
+    #     device="cuda:0" if torch.cuda.is_available() else "cpu",
+    #     mocap_file=os.path.join(env_path, "mocap.npz"),
+    #     norm_mode="zscore",
+    #     latent_size=32,
+    #     num_embeddings=12,
+    #     num_experts=6,
+    #     num_condition_frames=1,
+    #     num_future_predictions=1,
+    #     num_steps_per_rollout=8,
+    #     kl_beta=1.0,
+    #     load_saved_model=False,
+    # )
+
+    args = parser.parse_args()
 
     # learning parameters
     teacher_epochs = 20

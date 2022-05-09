@@ -1,6 +1,7 @@
 import argparse
 import multiprocessing as mp
 import os
+import pdb
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -89,7 +90,6 @@ def test_vae_replay_full_motion(args):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--env",
