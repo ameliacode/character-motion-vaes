@@ -42,7 +42,7 @@ def test_vae_replay_full_motion(args):
 
     latent_size = env.action_space.shape[0]
     action_shape = (num_characters, latent_size)
-    action = torch.empty(action_shape).to(device)
+    action = torch.empty(action_shape).to(device)  # 1 * 32 (average humanoid dof)
 
     # overwrite if necessary
     if args.frame != -1:
