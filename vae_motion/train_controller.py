@@ -203,7 +203,7 @@ def main():
                 ep_info["reward"].append(ep_reward[done].clone())
                 ep_reward *= (~done).float()  # zero out the dones
                 reset_indices = env.parallel_ind_buf.masked_select(done.squeeze())
-                obs = env.reset(reset_indices)
+                obs = env.reset(indices=reset_indices)
 
             if end_of_rollout:
                 obs = env.reset()
