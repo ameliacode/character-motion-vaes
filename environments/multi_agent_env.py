@@ -1,0 +1,235 @@
+import pybullet as p
+import gym
+from pathlib import Path
+import numpy as np
+import torch
+import functools
+from pettingzoo import AECEnv
+from pettingzoo.utils import agent_selector
+from pettingzoo.utils import wrappers
+
+try:
+    import sys
+    from os import path
+    current_dir = path.dirname(path.abspath(__file__))
+    parent_dir = path.dirname(current_dir)
+    sys.path.append(parent_dir)
+    from environments.mocap_envs import *
+    from environments.mocap_renderer import *
+    from common.bullet_objects import *
+    from common.bullet_utils import *
+except:
+    from .mocap_envs import *
+    from ..common.bullet_objects import *
+    from ..common.bullet_utils import *
+    from .mocap_renderer import *
+
+## Environment for single agent independent Learning in shared environment state
+
+
+def env():
+    pass
+
+def raw_env():
+    pass
+
+class AdversePlayersPettingZooEnv(AECEnv, EnvBase): # raw env
+    def __init__(self,
+                 rendered=True,
+                 use_params=False,
+                 camera_tracking=True,
+                 frame_skip=1):
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.num_parallel = 2
+        self.current_dir = Path(__file__).resolve().parents[1]
+        self.pose_vae_path = str(self.current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt")
+        EnvBase.__init__(self, self.num_parallel,
+                        self.device,
+                        self.pose_vae_path,
+                        rendered,
+                        use_params,
+                        camera_tracking,
+                        frame_skip)
+        self.arena_length = (-3,3)
+        self.arena_width = (-3,3)
+
+        # REFER TO ENVBASE not PettingZoo
+        # self.possible_agents=[0,1] #players
+        # self._action_spaces = {agent: self._action_space(agent) for agent in self.possible_agents}
+        # self._observation_spaces = {agent: self._observation_space(agent) for agent in self.possible_agents}
+
+        self.glove_indices = [30,23] #right and left hand
+        self.foot_indices = [11,6] #right and left toe
+        self.target_indices = [13,14] #torso
+
+        #temporary state container for velocity calculation
+        self.agents_foot_state = [[] for _ in range(self.num_parallel)]
+        self.agents_glove_state = [[] for _ in range(self.num_parallel)]
+
+    @functools.lru_cache(maxsize=None)
+    def _observation_space(self, agent):
+        self.observation_dim = (
+            self.frame_dim * self.num_condition_frames + self.action_dim
+        )
+        high = np.inf * np.ones([self.observation_dim])
+        return gym.spaces.Box(-high, high, dtype=np.float32)
+
+    @functools.lru_cache(maxsize=None)
+    def _action_space(self, agent):
+        high = np.inf * np.ones([self.action_dim])
+        return gym.spaces.Box(-high, high, dtype=np.float32)
+
+    def calc_foot_state(self, agent): # player's foot and opponent target
+        player = agent
+        opponent = (agent + 1) % 2
+
+        player_foot = [self.viewer.characters.ids[player + self.foot_indices[idx]] for idx in range(len(self.foot_indices))]
+        opponent_target = [self.viewer.characters.ids[opponent + self.target_indices[idx]] for idx in range(len(self.target_indices))]
+
+        foot_state = []
+        for foot_id in player_foot: #right foot, left foot respectively
+            foot_state = self.viewer._p.getBasePositionAndOrientation(foot_id)
+            for target_id in opponent_target: #pelvis, abdomen respectively
+                target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
+                relative_pos = target_state[0] - foot_state[0]
+                if self.agents_foot_state[agent] is not None:
+                    foot_state.append(relative_pos, relative_pos - self.agents_foot_state[agent])
+                else:
+                    foot_state.append((relative_pos, [0.0,0.0,0.0]))
+
+        self.agents_foot_state[agent] = foot_state
+        return foot_state
+
+    def calc_glove_state(self, agent):  # player's glove and opponent target
+        player = agent
+        opponent = (agent + 1) % 2
+
+        player_glove = [self.viewer.characters.ids[player + self.glove_indices[idx]] for idx in range(len(self.glove_indices))]
+        opponent_target = [self.viewer.characters.ids[opponent + self.target_indices[idx]] for idx in range(len(self.target_indices))]
+
+        glove_state = []
+        for glove_id in player_glove:  # right glove, left glove respectively
+            glove_state = self.viewer._p.getBasePositionAndOrientation(glove_id)
+            for target_id in opponent_target:  # pelvis, abdomen respectively
+                target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
+                relative_pos = target_state[0] - glove_state[0]
+                if self.agents_glove_state[agent] is not None:
+                    glove_state.append(relative_pos, relative_pos - self.agents_foot_state[agent])
+                else:
+                    glove_state.append((relative_pos, [0.0, 0.0, 0.0]))
+
+        self.agents_glove_state[agent] = glove_state
+        return glove_state
+
+    def get_root_delta_and_angle(self, agent): # player and opponent
+        player = agent
+        opponent = (agent + 1) % 2
+
+        root_delta = self.root_xz[opponent] - self.root_xz[player]
+        root_angle = (
+            torch.atan2(root_delta[:,1], root_delta[:,0]).unsqueeze(1)
+            + self.root_facing[player]
+        )
+        return root_delta, root_angle
+
+    def get_attack_state(self, agent):  # player to opponent
+        player = agent
+        foot_state = self.agents_foot_state[player]
+        glove_state = self.agents_glove_state[player]
+        return foot_state, glove_state
+
+    def get_defense_state(self, agent):  # opponent to player
+        opponent = agent
+        foot_state = self.agents_foot_state[opponent]
+        glove_state = self.agents_glove_state[opponent]
+        return foot_state, glove_state
+
+    def observe(self, agent):
+        player = agent
+        opponent = (agent + 1) % 2
+
+        root_delta, _ = self.get_root_delta_and_angle(player)
+        mat = self.get_rotation_matrix(-self.root_facing[player])
+        delta = (mat * root_delta.unsqueeze(1)).sum(dim=2)
+        condition = self.get_vae_condition(normalize=False)
+
+        attack_foot, attack_glove = self.get_attack_state(player)
+        defense_foot, defense_glove = self.get_defense_state(opponent)
+
+        return condition, delta, attack_foot, attack_glove, defense_foot, defense_glove
+
+    def calc_env_state(self, next_frame):
+        self.next_frame = next_frame
+
+        if self.substep == self.frame_skip - 1:
+            self.timestep += 1
+        self.substep = (self.substep + 1) % self.frame_skip
+
+        self.integrate_root_translation(next_frame)
+
+
+
+    def reset(self):
+        # self.agents = self.paossible_agents[:]
+        self.agents = [0,1]
+        self.timestep = 0
+        self.substep = 0
+        self.root_facing.fill_(0)
+        self.root_xz.fill_(0)
+        self.done.fill_(False)
+        self.foot_pos_history.fill_(1)
+        self.reset_initial_frames()
+
+        # REFER TO ENVBASE not PettingZoo
+        # self.rewards = {agent: 0 for agent in self.agents}
+        # self._cumulative_rewards = {agent: 0 for agent in self.agents}
+        # self.dones = {agent: False for agent in self.agents}
+        # self.infos = {agent: {} for agent in self.agents}
+        # self.state = {agent: None for agent in self.agents}
+        # self.observations = {agent:None for agent in self.agents}
+        # self.num_moves = 0
+        #
+        # self._agent_selector = agent_selector(self.agents)
+        # self.agent_selection = self._agent_selector.next()
+        #
+        self.foot_state_dim = 24 # len(target_indices) * len(foot_indices) * left+right * 3D coord
+        self.glove_state_dim = 24 # len(target_indices) * len(foot_indices) * left+right * 3D coord
+        self.agents_foot_state = torch.zeros((self.num_parallel, self.foot_state_dim)).to(self.device) # ??
+        self.agents_glove_state = torch.zeros((self.num_parallel, self.glove_state_dim)).to(self.device) # ??
+
+    def calc_env_state(self, next_frame):
+        self.next_frame = next_frame
+
+    def step(self, action: torch.Tensor):
+
+        if not action:
+            self.agent = []
+            return {}, {}, {}, {}
+
+        action = action * self.action_scale
+
+        rewards = {}
+        self.num_moves += 1
+
+
+        if self.dones[self.agent_selection]:
+            return self._was_done_step(action)
+
+        agent = self.agent_selection
+
+        self._cumulative_rewards[agent] = 0
+        self.state[self.agent_selection] = action
+
+        if self._agent_selector.is_last():
+            pass
+
+
+    def render(self, mode="human", **kwargs):
+        self.action = self._action_spaces[0].sample()
+        EnvBase.render(self)
+
+    def close(self):
+        EnvBase.close(self)
+
+    def seed(self, seed=None):
+        EnvBase.seed(self, seed)

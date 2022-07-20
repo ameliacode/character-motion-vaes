@@ -15,7 +15,7 @@ class VSphere:
         pos=None,
         rgba=None,
         max=False,
-        collide=False,
+        collide=True,
         flags=0,
         replica=1,
     ):

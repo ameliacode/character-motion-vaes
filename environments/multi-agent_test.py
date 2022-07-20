@@ -4,17 +4,26 @@ import torch
 import time
 
 try:
+    from .mocap_envs import *
+    from ..common.bullet_objects import *
+    from ..common.bullet_utils import *
+    from .mocap_renderer import *
+    from .multi_agent_env import *
+except:
     import sys
     from os import path
-    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
-    from mocap_envs import *
-    from multi_agent_target_env import *
-except:
-    from .mocap_envs import *
-    from .multi_agent_target_env import *
+    current_dir = path.dirname(path.abspath(__file__))
+    parent_dir = path.dirname(current_dir)
+    sys.path.append(parent_dir)
+    from environments.mocap_envs import *
+    from environments.mocap_renderer import *
+    from environments.multi_agent_env import *
+    from common.bullet_objects import *
+    from common.bullet_utils import *
 
-def test_env(device, mvae_dir, controller_dir):
-    env = TwoPlayerFightingEnv(device=device, pose_vae_path=mvae_dir)
+def test_env(mvae_dir, controller_dir):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    env = AdversePlayersPettingZooEnv()
     obs = env.reset()
     ep_reward = 0
     while True:
@@ -33,8 +42,18 @@ def test_env(device, mvae_dir, controller_dir):
                 obs = env.reset()
             time.sleep(0.01)
 
+def test_render(mvae_dir, controller_dir):
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    env = AdversePlayersPettingZooEnv()
+    # env = TestEnv()
+    env.reset()
+    env.get_foot_pos_and_ori(0)
+    # while True:
+        # env.render()
+
+
 def test_model(device, mvae_dir, timesteps=1e7): # execution of petting zoo implementation
-    env = TwoPlayerFightingEnv(device=device, pose_vae_path=mvae_dir)
+    env = AdversePlayersPettingZooEnv(device=device, pose_vae_path=mvae_dir)
     policy = 0
     env.reset()
     for agent in env.agent_iter():
@@ -51,7 +70,8 @@ def main():
     mvae_dir = current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt"
     controller_dir = current_dir / "vae_motion" / "con_TargetEnv-v0.pt"
 
-    test_env(device=device, mvae_dir=mvae_dir, controller_dir=controller_dir)
+    # test_env(mvae_dir=mvae_dir, controller_dir=controller_dir)
+    test_render(mvae_dir=mvae_dir, controller_dir=controller_dir)
 
 
 if __name__=="__main__":
