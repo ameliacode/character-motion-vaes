@@ -61,8 +61,7 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
         self.foot_indices = [11,6] #right and left toe
         self.target_indices = [16,13,14] #Head,Torso
         #temporary state container for velocity calculation
-        self.agents_foot_state = [[] for _ in range(self.num_characters)]
-        self.agents_glove_state = [[] for _ in range(self.num_characters)]
+        self.glove_state_dim = 6 * 6 # len(target_indices) * len(foot_indices) * left+right * 3D coord
 
         # PettingZoo
         self.possible_agents=[0,1] #players
@@ -89,48 +88,27 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
         high = np.inf * np.ones([self.action_dim])
         return Box(-high, high, dtype=np.float32)
 
-    # def calc_foot_state(self, agent): # player's foot and opponent target
-    #     player = agent
-    #     opponent = (agent + 1) % 2
-    #
-    #     player_foot = [self.viewer.characters.ids[player + self.foot_indices[idx]] for idx in range(len(self.foot_indices))]
-    #     opponent_target = [self.viewer.characters.ids[opponent + self.target_indices[idx]] for idx in range(len(self.target_indices))]
-    #
-    #     foot_state = []
-    #     for foot_id in player_foot: #right foot, left foot respectively
-    #         foot_state = self.viewer._p.getBasePositionAndOrientation(foot_id)
-    #         for target_id in opponent_target: #pelvis, abdomen respectively
-    #             target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
-    #             relative_pos = target_state[0] - foot_state[0]
-    #             if self.agents_foot_state[agent] is not None:
-    #                 foot_state.append(relative_pos, relative_pos - self.agents_foot_state[agent])
-    #             else:
-    #                 foot_state.append((relative_pos, [0.0,0.0,0.0]))
-    #
-    #     self.agents_foot_state[agent] = foot_state
-    #     return foot_state
-
     def calc_glove_state(self, agent):  # player's glove and opponent target
         player = agent
         opponent = (agent + 1) % 2
 
-        player_glove = [self.viewer.characters.ids[player + self.glove_indices[idx]] for idx in range(len(self.glove_indices))]
-        opponent_target = [self.viewer.characters.ids[opponent + self.target_indices[idx]] for idx in range(len(self.target_indices))]
+        player_glove = [self.viewer.characters.ids[player*31 + self.glove_indices[idx]] for idx in range(len(self.glove_indices))]
+        print(self.viewer.characters.ids)
+        opponent_target = [self.viewer.characters.ids[opponent*31 + self.target_indices[idx]] for idx in range(len(self.target_indices))]
 
-        glove_state = []
-        for glove_id in player_glove:  # right glove, left glove respectively
-            glove_state = self.viewer._p.getBasePositionAndOrientation(glove_id)
-            for target_id in opponent_target:  # pelvis, abdomen respectively
-                target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
-                relative_pos = [target_state[0][idx] - glove_state[0][idx] for idx in range(3) ]
-                if self.agents_glove_state[agent] is not None:
-                    # relative_vel = [relative_pos[idx] - self.agents_foot_state[agent]]
-                    glove_state.append(relative_pos, relative_pos - self.agents_foot_state[agent])
-                else:
-                    glove_state.append(relative_pos, [0.0, 0.0, 0.0])
+        agent_glove_idx = 0
+        agent_glove_state = []
+        for target_id in opponent_target: # Head, pelvis, abdomen respectively
+            target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
+            for glove_id in player_glove: # right glove, left glove respectively
+                glove_state = self.viewer._p.getBasePositionAndOrientation(glove_id)
+                relative_pos = [target_state[0][idx] - glove_state[0][idx] for idx in range(3)]
+                agent_glove_state.append(relative_pos)
+                agent_glove_state.append([relative_pos[idx] - self.agents_glove_state[agent][agent_glove_idx][idx] for idx in range(3)])
+                agent_glove_idx += 2
 
-        self.agents_glove_state[agent] = glove_state
-        return glove_state
+        self.agents_glove_state[agent] = agent_glove_state
+        return agent_glove_state
 
     def get_root_delta_and_angle(self, agent): # player and opponent
         player = agent
@@ -144,16 +122,12 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
 
     def get_attack_state(self, agent):  # player to opponent
         player = agent
-        # foot_state = self.agents_foot_state[player]
         glove_state = self.agents_glove_state[player]
-        # return foot_state, glove_state
         return glove_state
 
     def get_defense_state(self, agent):  # opponent to player
         opponent = agent
-        # foot_state = self.agents_foot_state[opponent]
         glove_state = self.agents_glove_state[opponent]
-
         return glove_state
 
     def observe(self, agent): # get observable components
@@ -183,11 +157,9 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
 
         self.integrate_root_translation(next_frame)
 
-        # for agent in self.agents:
-        # #     self.calc_foot_state(agent)
-        #     self.calc_glove_state(agent)
+        for agent in self.agents:
+            self.calc_glove_state(agent)
 
-        self.render()
 
     def reset(self):
         self.timestep = 0
@@ -204,16 +176,14 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
         self.dones = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
         self.state = {agent: None for agent in self.agents}
+        self.actions = {agent: None for agent in self.agents}
         self.observations = {agent:None for agent in self.agents}
         self.num_moves = 0
 
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
 
-        # self.foot_state_dim = 24 # len(target_indices) * len(foot_indices) * left+right * 3D coord
-        self.glove_state_dim = 6 * 6 # len(target_indices) * len(foot_indices) * left+right * 3D coord
-        # self.agents_foot_state = torch.zeros((self.num_parallel, self.foot_state_dim)).to(self.device) # ??
-        # self.agents_glove_state = torch.zeros((self.num_parallel, self.glove_state_dim)).to(self.device) # ??
+        self.agents_glove_state = {agent:[[0.0,0.0,0.0] for _ in range(12)] for agent in self.agents} # 6 = self.num_characters * 3d
 
         # return observation
 
@@ -224,25 +194,27 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
 
         agent = self.agent_selection
         # self._action_spaces[agent] = action
-        action = torch.tensor([action * self.action_scale]).to(self.device)
-        next_frame = self.get_vae_next_frame(action)
-        self.action = action
-
+        # action = torch.tensor([action * self.action_scale]).to(self.device)
+        self.actions[agent] = [x * self.action_scale for x in action.tolist()]
         self._cumulative_rewards[agent] = 0
-        self.state[agent] = self.calc_env_state(next_frame[:,0]) # frame skip = 1
 
         # penalty reward
         # action_penalty = self.calc_action_penalty()
         # energy_penalty = self.calc_energy_penalty(next_frame)
         # self.rewards[agent] += energy_penalty
 
-
         if self._agent_selector.is_last(): # reward
             self.num_moves += 1
-
+            action = [self.actions[0] , self.actions[1] ]
+            action = torch.tensor(action).to(self.device)
+            next_frame = self.get_vae_next_frame(action)
+            self.action = action
+            self.calc_env_state(next_frame[:, 0])  # frame skip = 1
+            self.render()
         else:
             self._clear_rewards()
 
+        self.agent_selection = self._agent_selector.next()
 
     def render(self, mode="human", **kwargs):
         EnvBase.render(self)

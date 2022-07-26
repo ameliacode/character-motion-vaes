@@ -47,6 +47,7 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
                         use_params,
                         camera_tracking,
                         frame_skip)
+
         self.arena_length = (-3,3)
         self.arena_width = (-3,3)
         self.glove_indices = [30,23] #right and left hand
@@ -61,8 +62,11 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
         self.possible_agents=[0,1] #players
         self.agents = self.possible_agents[:]
 
+
+        high = np.inf * np.ones([self.action_dim])
+        self.action_space = {agent: Box(-high, high, dtype=np.float32) for agent in self.possible_agents}
         self.observation_dim = (
-                self.frame_dim * self.num_condition_frames + self.action_dim
+            self.frame_dim * self.num_condition_frames + self.action_dim
         )
         high = np.inf * np.ones([self.observation_dim])
         self.observation_space = {agent: Box(-high, high, dtype=np.float32) for agent in self.possible_agents}
@@ -205,6 +209,7 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
         self.glove_state_dim = 6 * 6 # len(target_indices) * len(foot_indices) * left+right * 3D coord
         # self.agents_foot_state = torch.zeros((self.num_parallel, self.foot_state_dim)).to(self.device) # ??
         self.agents_glove_state = torch.zeros((self.num_parallel, self.glove_state_dim)).to(self.device) # ??
+
 
         # observation = self.get_observation_components()
         # return torch.cat(observation, dim=1)
