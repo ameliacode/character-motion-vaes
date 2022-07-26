@@ -77,7 +77,6 @@ def test_vae_replay_full_motion(args):
                     alpha.view(-1, 1, 1) * frames
                     + alpha.mul(-1).add(1).view(-1, 1, 1) * mocap_data[prediction_range]
                 )
-
                 frame = frames[:, i]
                 _, _, done, info = env.calc_env_state(frame)
 

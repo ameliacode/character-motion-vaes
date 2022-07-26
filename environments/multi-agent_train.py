@@ -8,14 +8,14 @@ from stable_baselines3.ppo import CnnPolicy
 try:
     sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
     from mocap_renderer import *
-    from multi_agent_env import *
+    from multi_agent_pettingzoo import *
 except:
     from .mocap_renderer import *
-    from .multi_agent_env import *
+    from .multi_agent_pettingzoo import *
 
 
 def train(model_path, timesteps=1e7):
-    env = TwoPlayerFightingEnv(device=0, pose_vae_path=model_path)
+    env = AdversePlayersFightingEnv(device=0, pose_vae_path=model_path)
     obs_list = env.reset()
     action_list = []
     for epoch in range(timesteps):

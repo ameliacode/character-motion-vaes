@@ -17,13 +17,22 @@ except:
     sys.path.append(parent_dir)
     from environments.mocap_envs import *
     from environments.mocap_renderer import *
-    from environments.multi_agent_env import *
+    from environments.multi_agent_pettingzoo import *
     from common.bullet_objects import *
     from common.bullet_utils import *
 
 def test_env(mvae_dir, controller_dir):
+    env = AdversePlayersFightingEnv()
+    env.reset()
+    while True:
+        action = env.action_space.sample()
+        env.step(action)
+        env.render()
+        time.sleep(0.01)
+
+def test_controller(mvae_dir, controller_dir):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    env = AdversePlayersPettingZooEnv()
+    env = AdversePlayersFightingEnv()
     obs = env.reset()
     ep_reward = 0
     while True:
@@ -42,18 +51,27 @@ def test_env(mvae_dir, controller_dir):
                 obs = env.reset()
             time.sleep(0.01)
 
+def test_pettingzoo():
+    env = AdversePlayersFightingEnv()
+    env.reset()
+    policy = lambda obs, agent: env._action_spaces[agent].sample()
+    for agent in env.agent_iter(max_iter = 2000):
+        observation, reward, done, info = env.last()
+        action = policy(observation, agent)
+        env.step(action)
+
+
 def test_render(mvae_dir, controller_dir):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    env = AdversePlayersPettingZooEnv()
+    env = AdversePlayersFightingEnv()
     # env = TestEnv()
     env.reset()
-    env.get_foot_pos_and_ori(0)
-    # while True:
-        # env.render()
+    while True:
+        env.render()
 
 
 def test_model(device, mvae_dir, timesteps=1e7): # execution of petting zoo implementation
-    env = AdversePlayersPettingZooEnv(device=device, pose_vae_path=mvae_dir)
+    env = AdversePlayersFightingEnv(device=device, pose_vae_path=mvae_dir)
     policy = 0
     env.reset()
     for agent in env.agent_iter():
@@ -71,8 +89,8 @@ def main():
     controller_dir = current_dir / "vae_motion" / "con_TargetEnv-v0.pt"
 
     # test_env(mvae_dir=mvae_dir, controller_dir=controller_dir)
-    test_render(mvae_dir=mvae_dir, controller_dir=controller_dir)
-
+    # test_render(mvae_dir=mvae_dir, controller_dir=controller_dir)
+    test_pettingzoo()
 
 if __name__=="__main__":
     main()
