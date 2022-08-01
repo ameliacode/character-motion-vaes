@@ -228,15 +228,16 @@ class FlagPole:
         self._quat = [1, 0, 0, 1]
 
         base_path = os.path.join(current_dir, "data", "misc")
-        pole_path = os.path.join(base_path, "pole.obj")
+        # pole_path = os.path.join(base_path, "pole.obj")
+        pole_path = os.path.join(base_path, "punchbag.obj")
 
         shape = self._p.createVisualShapeArray(
-            shapeTypes=[self._p.GEOM_MESH, self._p.GEOM_BOX],
-            halfExtents=[[0, 0, 0], [0.01, 0.3, 0.2]],
+            shapeTypes=[self._p.GEOM_MESH],
+            halfExtents=[[0, 0, 0]],
             fileNames=[pole_path, ""],
             rgbaColors=[self._rgba, self._rgba],
-            visualFramePositions=[[0, 0, 0], [0, 1.12, 0]],
-            meshScales=[[0.01, 0.01, 0.01], [0.01, 0.01, 0.01]],
+            visualFramePositions=[[0, 1.0, 0]],
+            meshScales=[[0.2, 0.2, 0.2]],
         )
 
         id = self._p.createMultiBody(
@@ -253,7 +254,7 @@ class FlagPole:
         text_path = os.path.join(base_path, "zink.jpg")
         texture = self._p.loadTexture(text_path)
         # don't need to change for every id for some reason
-        self._p.changeVisualShape(self.id, -1, textureUniqueId=texture)
+        # self._p.changeVisualShape(self.id, -1, textureUniqueId=texture)
 
         # Need this otherwise batchPositions does not work
         self._p.syncBodyInfo()
@@ -283,6 +284,7 @@ class Arrow:
 
         self.id = self._p.createMultiBody(
             baseMass=0,
+            baseCollisionShapeIndex=shape,
             baseVisualShapeIndex=shape,
             baseInertialFramePosition=(0, 1, 0),
             baseInertialFrameOrientation=(0, 0, -1, 1),

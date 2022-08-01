@@ -93,7 +93,6 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
         opponent = (agent + 1) % 2
 
         player_glove = [self.viewer.characters.ids[player*31 + self.glove_indices[idx]] for idx in range(len(self.glove_indices))]
-        print(self.viewer.characters.ids)
         opponent_target = [self.viewer.characters.ids[opponent*31 + self.target_indices[idx]] for idx in range(len(self.target_indices))]
 
         agent_glove_idx = 0
@@ -159,7 +158,6 @@ class AdversePlayersFightingEnv(AECEnv, EnvBase): # raw env
 
         for agent in self.agents:
             self.calc_glove_state(agent)
-
 
     def reset(self):
         self.timestep = 0

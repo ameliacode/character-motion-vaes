@@ -95,7 +95,15 @@ class EnvBase(gym.Env):
         self.joint_indices = (x_indices, y_indices, z_indices)
 
         if self.is_rendered:
-            from .mocap_renderer import PBLMocapViewer
+            try:
+                from .mocap_renderer import PBLMocapViewer
+            except:
+                import sys
+                from os import path
+                current_dir = path.dirname(path.abspath(__file__))
+                parent_dir = path.dirname(current_dir)
+                sys.path.append(parent_dir)
+                from environments.mocap_renderer import PBLMocapViewer
 
             self.viewer = PBLMocapViewer(
                 self,

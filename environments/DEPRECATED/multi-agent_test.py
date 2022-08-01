@@ -17,7 +17,7 @@ except:
     sys.path.append(parent_dir)
     from environments.mocap_envs import *
     from environments.mocap_renderer import *
-    from environments.multi_agent_pettingzoo import *
+    from environments.DEPRECATED.multi_agent_env import *
     from common.bullet_objects import *
     from common.bullet_utils import *
 
@@ -27,7 +27,6 @@ def test_env(mvae_dir, controller_dir):
     while True:
         action = env.action_space.sample()
         env.step(action)
-        env.render()
         time.sleep(0.01)
 
 def test_controller(mvae_dir, controller_dir):
@@ -88,9 +87,9 @@ def main():
     mvae_dir = current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt"
     controller_dir = current_dir / "vae_motion" / "con_TargetEnv-v0.pt"
 
-    # test_env(mvae_dir=mvae_dir, controller_dir=controller_dir)
+    test_env(mvae_dir=mvae_dir, controller_dir=controller_dir)
     # test_render(mvae_dir=mvae_dir, controller_dir=controller_dir)
-    test_pettingzoo()
+    # test_pettingzoo()
 
 if __name__=="__main__":
     main()

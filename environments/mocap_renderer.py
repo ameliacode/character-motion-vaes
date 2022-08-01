@@ -74,7 +74,7 @@ class PBLMocapViewer:
         self._p.configureDebugVisualizer(pb.COV_ENABLE_RENDERING, 0)
 
         self.camera = Camera(
-            self._p, fps=target_fps, dist=self.camera_distance, pitch=-10, yaw=45
+            self._p, fps=target_fps, dist=self.camera_distance, pitch=-30, yaw=45
         )
         scene = SinglePlayerStadiumScene(
             self._p, gravity=9.8, timestep=1 / target_fps, frame_skip=1
@@ -85,7 +85,8 @@ class PBLMocapViewer:
         self.colours = cmap(np.linspace(0, 1, self.num_characters))
 
         if num_characters == 1:
-            self.colours[0] = (0.376, 0.490, 0.545, 1)
+            # self.colours[0] = (0.376, 0.490, 0.545, 1)
+            self.colours[0] = (0.65,0.65,0.65,1.0)
 
         # here order is important for some reason ?
         # self.targets = MultiTargets(self._p, num_characters, self.colours)

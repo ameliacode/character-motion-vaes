@@ -83,7 +83,7 @@ def main():
     # setup parameters
     args = SimpleNamespace(
         env_module="environments",
-        env_name="TargetEnv-v0",
+        env_name="PunchingPlayerEnv-v0",
         device="cuda:0" if torch.cuda.is_available() else "cpu",
         num_parallel=100,
         vae_path="models/",

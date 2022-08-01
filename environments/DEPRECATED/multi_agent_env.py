@@ -33,12 +33,12 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
                  use_params=False,
                  camera_tracking=True,
                  frame_skip=1):
-        # self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.device = "cpu"
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
         self.num_parallel = 2 # number of characters in this case
         self.num_characters = self.num_parallel
 
-        self.current_dir = Path(__file__).resolve().parents[1]
+        self.current_dir = Path(__file__).resolve().parents[2]
         self.pose_vae_path = str(self.current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt")
         EnvBase.__init__(self, self.num_parallel,
                         self.device,
@@ -64,33 +64,11 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
 
 
         high = np.inf * np.ones([self.action_dim])
-        self.action_space = {agent: Box(-high, high, dtype=np.float32) for agent in self.possible_agents}
         self.observation_dim = (
             self.frame_dim * self.num_condition_frames + self.action_dim
         )
         high = np.inf * np.ones([self.observation_dim])
-        self.observation_space = {agent: Box(-high, high, dtype=np.float32) for agent in self.possible_agents}
-
-    # def calc_foot_state(self, agent): # player's foot and opponent target
-    #     player = agent
-    #     opponent = (agent + 1) % 2
-    #
-    #     player_foot = [self.viewer.characters.ids[player + self.foot_indices[idx]] for idx in range(len(self.foot_indices))]
-    #     opponent_target = [self.viewer.characters.ids[opponent + self.target_indices[idx]] for idx in range(len(self.target_indices))]
-    #
-    #     foot_state = []
-    #     for foot_id in player_foot: #right foot, left foot respectively
-    #         foot_state = self.viewer._p.getBasePositionAndOrientation(foot_id)
-    #         for target_id in opponent_target: #pelvis, abdomen respectively
-    #             target_state = self.viewer._p.getBasePositionAndOrientation(target_id)
-    #             relative_pos = target_state[0] - foot_state[0]
-    #             if self.agents_foot_state[agent] is not None:
-    #                 foot_state.append(relative_pos, relative_pos - self.agents_foot_state[agent])
-    #             else:
-    #                 foot_state.append((relative_pos, [0.0,0.0,0.0]))
-    #
-    #     self.agents_foot_state[agent] = foot_state
-    #     return foot_state
+        self.observation_space = Box(-high, high, dtype=np.float32)
 
     def calc_glove_state(self, agent):  # player's glove and opponent target
         player = agent
@@ -205,11 +183,8 @@ class AdversePlayersFightingEnv(EnvBase): # raw env
             self.foot_pos_history.index_fill_(dim=0, index=indices, value=1)
             self.reset_agent_position()
 
-        # self.foot_state_dim = 24 # len(target_indices) * len(foot_indices) * left+right * 3D coord
         self.glove_state_dim = 6 * 6 # len(target_indices) * len(foot_indices) * left+right * 3D coord
-        # self.agents_foot_state = torch.zeros((self.num_parallel, self.foot_state_dim)).to(self.device) # ??
         self.agents_glove_state = torch.zeros((self.num_parallel, self.glove_state_dim)).to(self.device) # ??
-
 
         # observation = self.get_observation_components()
         # return torch.cat(observation, dim=1)
