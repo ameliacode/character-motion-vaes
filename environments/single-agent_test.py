@@ -33,7 +33,7 @@ def test_env():
             # action = controller.predict(obs)
             action = env.action_space.sample()
             action = torch.tensor([action] * num_parallel).to(device)
-            print(action)
+            # print(action)
             env.step(action)
             time.sleep(0.01)
 

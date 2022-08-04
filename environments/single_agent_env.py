@@ -33,23 +33,30 @@ class PunchingPlayerEnv(TargetEnv):
         self.current_dir = Path(__file__).resolve().parents[1]
         # self.pose_vae_path = str(self.current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt")
         self.pose_vae_path = pose_vae_path
-        super().__init__(num_parallel=self.num_parallel,
-                         device=self.device,
-                         pose_vae_path=self.pose_vae_path,
-                         rendered=rendered,
-                         use_params=use_params,
-                         camera_tracking=camera_tracking,
-                         frame_skip=frame_skip)
+        super().__init__(self.num_parallel,
+                         self.device,
+                         self.pose_vae_path,
+                         rendered,
+                         use_params,
+                         camera_tracking,
+                         frame_skip)
 
         self.root_indices = [24,17,6,1] # right & left shoulder, hip
         self.glove_indices = [30,23] # right and left hand
 
-        player_joints = self.viewer.characters.ids
-        player_glove = [[
-            player_joints[num * 31 + self.glove_indices[idx]]
-            for idx in range(len(self.glove_indices))
-        ] for num in range(self.num_parallel)]
-        self.player_glove = torch.tensor(player_glove).to(self.device) # number of character's glove joints
+        # player_joints = self.viewer.characters.ids
+        # player_glove = [[
+        #     player_joints[num * 31 + self.glove_indices[idx]]
+        #     for idx in range(len(self.glove_indices))
+        # ] for num in range(self.num_parallel)]
+        # player_root = [[
+        #     player_joints[num * 31 + self.root_indices[idx]]
+        #     for idx in range(len(self.root_indices))
+        # ] for num in range(self.num_parallel)]
+        #
+        # self.player_glove = torch.tensor(player_glove).to(self.device) # number of character's glove joints
+        # self.player_root = torch.tensor(player_root).to(self.device)
+
         self.glove_state = torch.zeros((self.num_parallel, 12)).to(self.device) # number of characters' glove state for velocity calculation
         self.target_radius = 3.0
 
@@ -88,7 +95,7 @@ class PunchingPlayerEnv(TargetEnv):
             self.reward.add_(100)
             self.reset_condition = True
 
-    def calc_glove_state(self):
+    def calc_glove_state(self, joints_pos): # this crashes with viewer when non rendered find other mothds..
         for num in range(self.num_parallel):
             right_glove_state = self.viewer._p.getBasePositionAndOrientation(self.player_glove[:,0][num])
             right_glove_pos = torch.tensor(right_glove_state[0])
@@ -103,22 +110,25 @@ class PunchingPlayerEnv(TargetEnv):
             self.glove_state[:,6:9].copy_(left_glove_pos)
             self.glove_state[:,9:12].copy_(left_glove_vel)
 
-    def calc_facing_dir(self): # try to use "pose" variable
-        player_root = [self.viewer.characters.ids[idx] for idx in self.root_indices]
-        joint_states = [self.viewer._p.getBasePositionAndOrientation(joint_id) for joint_id in player_root]
+    def calc_facing_dir(self, joints_pos): # try to use "pose" variable, visualize two methods later
+        rewards = torch.zeros((self.num_parallel, 1))
+        for num in range(self.num_parallel):
+            shoulders = [self.viewer._p.getBasePositionAndOrientation(self.player_root[:,idx][num]) for idx in range(0,2)]
+            shoulder_vec = np.array(shoulders[0][0], dtype=np.float32) - np.array(shoulders[1][0], dtype=np.float32)
 
-        shoulder_vector = np.array([joint_states[0][0][idx] - joint_states[1][0][idx] for idx in range(3)], dtype=np.float32)
-        hip_vector = np.array([joint_states[2][0][idx] - joint_states[3][0][idx] for idx in range(3)], dtype=np.float32)
-        cross_product = np.cross(hip_vector, shoulder_vector)
+            hips = [self.viewer._p.getBasePositionAndOrientation(self.player_root[:,idx][num]) for idx in range(2,4)]
+            hip_vec = np.array(hips[0][0], dtype=np.float32) - np.array(hips[1][0], dtype=np.float32)
 
-        normal_vector = cross_product / np.linalg.norm(cross_product)
-        target_delta, _ = self.get_target_delta_and_angle()
-        y = normal_vector[:2][1] - target_delta[0][1]
-        x = normal_vector[:2][0] - target_delta[0][0]
-        radian = math.atan2(y,x)
+            cross_product = np.cross(hip_vec, shoulder_vec)
+            normal_vector = cross_product / np.linalg.norm(cross_product)
+            target_delta, _ = self.get_target_delta_and_angle()
 
-        # self.reward.add_(radian * 180 / math.pi)
-        self.reward.add_(-math.cos(radian)*100)
+            y = normal_vector[:2][1] - target_delta[0][1]
+            x = normal_vector[:2][0] - target_delta[0][0]
+            radian = math.atan2(y,x)
+            rewards[:,0][num] = torch.tensor(-math.cos(radian) * 100)
+
+        self.reward.add_(rewards)
 
     def calc_env_state(self, next_frame):
         self.next_frame = next_frame
@@ -140,8 +150,12 @@ class PunchingPlayerEnv(TargetEnv):
         else:
             self.reward.add_(progress)
 
-        self.calc_glove_state()
-        # self.calc_facing_dir()
+        x, y, _ = extract_joints_xyz(next_frame, *self.joint_indices, dim=1)
+        joints_pos = self.root_xz.unsqueeze(1) + torch.stack((x, y), dim=-1)
+        print(len(joints_pos[0]))  # use joint pos instead of viewer
+        print(joints_pos[0])
+        self.calc_glove_state(joints_pos)
+        self.calc_facing_dir(joints_pos)
 
         self.reward.add_(target_is_close.float() * 20.0)
 
