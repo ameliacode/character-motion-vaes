@@ -41,7 +41,7 @@ class PunchingPlayerEnv(TargetEnv):
                          camera_tracking,
                          frame_skip)
 
-        self.root_indices = [24,17,6,1] # right & left shoulder, hip
+        self.root_indices = [25,18,0,7,2] # right & left shoulder, hip, right & left
         self.glove_indices = [30,23] # right and left hand
 
         # player_joints = self.viewer.characters.ids
@@ -65,6 +65,7 @@ class PunchingPlayerEnv(TargetEnv):
         self.observation_dim = condition_size + 2 + 12
         high = np.inf * np.ones([self.observation_dim])
         self.observation_space = gym.spaces.Box(-high, high, dtype=np.float32)
+        self.reset_condition = torch.zeros((self.num_parallel, 1)).bool().to(self.device)
 
     def get_observation_components(self):
         target_delta, _ = self.get_target_delta_and_angle()
@@ -80,55 +81,62 @@ class PunchingPlayerEnv(TargetEnv):
         # to randomly face each other in marl this will be needed
 
     def reset(self, indices=None):
-        self.reset_condition = False
+        self.reset_condition.fill_(False)
         self.glove_state = torch.zeros((self.num_parallel, 12)).to(self.device)
         return super().reset(indices)
 
     def calc_punch_state(self):
         target_pos = self.target
-        right_glove_pos = self.glove_state[:,0:3]
-        left_glove_pos = self.glove_state[:,6:9]
+        right_glove_pos = self.glove_state[:,0:2]
+        left_glove_pos = self.glove_state[:,6:8]
 
         # right & left punch check
-        if np.linalg.norm(np.array(target_pos - right_glove_pos)) <= self.target_radius or \
-            np.linalg.norm(np.array(target_pos - left_glove_pos)) <= self.target_radius:
-            self.reward.add_(100)
-            self.reset_condition = True
+        self.reset_condition = torch.nn.functional.normalize(target_pos - right_glove_pos) <= self.target_radius
+                               # or torch.nn.functional.normalize(target_pos - left_glove_pos) <= self.target_radius
+
 
     def calc_glove_state(self, joints_pos): # this crashes with viewer when non rendered find other mothds..
-        for num in range(self.num_parallel):
-            right_glove_state = self.viewer._p.getBasePositionAndOrientation(self.player_glove[:,0][num])
-            right_glove_pos = torch.tensor(right_glove_state[0])
-            right_glove_vel = right_glove_pos - self.glove_state[:,0:3]
+        right_glove_state = joints_pos[:,self.glove_indices[0]]
+        right_glove_vel = right_glove_state - self.glove_state[:, 0:3]
 
-            left_glove_state = self.viewer._p.getBasePositionAndOrientation(self.player_glove[:,1][num])
-            left_glove_pos = torch.tensor(left_glove_state[0])
-            left_glove_vel = left_glove_pos - self.glove_state[:,6:9]
+        left_glove_state = joints_pos[:,self.glove_indices[1]]
+        left_glove_vel = left_glove_state - self.glove_state[:, 6:9]
 
-            self.glove_state[:,0:3].copy_(right_glove_pos)
-            self.glove_state[:,3:6].copy_(right_glove_vel)
-            self.glove_state[:,6:9].copy_(left_glove_pos)
-            self.glove_state[:,9:12].copy_(left_glove_vel)
+        self.glove_state[:,0:3].copy_(right_glove_state)
+        self.glove_state[:,3:6].copy_(right_glove_vel)
+        self.glove_state[:,6:9].copy_(left_glove_state)
+        self.glove_state[:,9:12].copy_(left_glove_vel)
 
     def calc_facing_dir(self, joints_pos): # try to use "pose" variable, visualize two methods later
-        rewards = torch.zeros((self.num_parallel, 1))
-        for num in range(self.num_parallel):
-            shoulders = [self.viewer._p.getBasePositionAndOrientation(self.player_root[:,idx][num]) for idx in range(0,2)]
-            shoulder_vec = np.array(shoulders[0][0], dtype=np.float32) - np.array(shoulders[1][0], dtype=np.float32)
 
-            hips = [self.viewer._p.getBasePositionAndOrientation(self.player_root[:,idx][num]) for idx in range(2,4)]
-            hip_vec = np.array(hips[0][0], dtype=np.float32) - np.array(hips[1][0], dtype=np.float32)
+        shoulders = [joints_pos[:,self.root_indices[idx]] * 0.3048 for idx in range(0,2)]
+        hip = joints_pos[:, self.root_indices[2]]* 0.3048
+        left_shoulder = shoulders[0] - hip
+        right_shoulder = shoulders[1] - hip
 
-            cross_product = np.cross(hip_vec, shoulder_vec)
-            normal_vector = cross_product / np.linalg.norm(cross_product)
-            target_delta, _ = self.get_target_delta_and_angle()
+        cross_product = torch.cross(left_shoulder, right_shoulder, dim=1)
+        normal_vector = torch.nn.functional.normalize(cross_product)
 
-            y = normal_vector[:2][1] - target_delta[0][1]
-            x = normal_vector[:2][0] - target_delta[0][0]
-            radian = math.atan2(y,x)
-            rewards[:,0][num] = torch.tensor(-math.cos(radian) * 100)
+        target_delta, _ = self.get_target_delta_and_angle()
+        y = normal_vector[:,1] - target_delta[:,1]
+        x = normal_vector[:,0] - target_delta[:,0]
+        radian = torch.atan2(y,x)
 
-        self.reward.add_(rewards)
+        if self.is_rendered:
+            cross_joint = joints_pos[:,0][0]*0.3048 + normal_vector[:][0]*0.3048
+            root_joint = joints_pos[:,0][0]*0.3048
+
+            self.viewer._p.addUserDebugLine(
+                lineFromXYZ=root_joint.tolist(),
+                lineToXYZ=cross_joint.tolist(),
+                lineColorRGB=(0,0,255),
+                lineWidth=2,
+                lifeTime=1,
+            )
+
+        reward = torch.cos(radian) * 100
+        reward = reward.view(self.num_parallel,1)
+        self.reward.add_(reward)
 
     def calc_env_state(self, next_frame):
         self.next_frame = next_frame
@@ -150,10 +158,10 @@ class PunchingPlayerEnv(TargetEnv):
         else:
             self.reward.add_(progress)
 
-        x, y, _ = extract_joints_xyz(next_frame, *self.joint_indices, dim=1)
-        joints_pos = self.root_xz.unsqueeze(1) + torch.stack((x, y), dim=-1)
-        print(len(joints_pos[0]))  # use joint pos instead of viewer
-        print(joints_pos[0])
+        x, y, z = extract_joints_xyz(next_frame, *self.joint_indices, dim=1)
+        joints_xy = self.root_xz.unsqueeze(1) + torch.stack((x, y), dim=-1)
+        joints_pos = torch.cat((joints_xy, z.unsqueeze(-1)), dim=-1)
+
         self.calc_glove_state(joints_pos)
         self.calc_facing_dir(joints_pos)
 
@@ -164,11 +172,11 @@ class PunchingPlayerEnv(TargetEnv):
 
         if target_is_close.any():
             self.calc_punch_state()
-            self.reset_condition = True
-            if self.reset_condition:
+            if self.reset_condition.any():
                 reset_indices = self.parallel_ind_buf.masked_select( # used for reward-based early termination
                     target_is_close.squeeze(1)
                 )
+                self.reward.add_(1000)
                 self.reset_target(indices=reset_indices)
 
         obs_component = self.get_observation_components()

@@ -18,7 +18,7 @@ except:
 
 def test_env():
     # device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    num_parallel = 2
+    num_parallel = 3
     device = "cpu"
     current_dir = Path(__file__).resolve().parents[1]
     mvae_dir = current_dir / "vae_motion" / "models" / "posevae_c1_e6_l32.pt"
