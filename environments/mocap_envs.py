@@ -44,7 +44,7 @@ class EnvBase(gym.Env):
         self.load_data(pose_vae_path)
 
         self.action_scale = 4.0
-        self.data_fps = 30
+        self.data_fps = 120
         self.frame_dim = self.mocap_data.shape[1]
         self.num_condition_frames = self.pose_vae_model.num_condition_frames
 
@@ -423,8 +423,10 @@ class TargetEnv(EnvBase):
             frame_skip,
         )
 
-        self.arena_length = (-60.0, 60.0)
-        self.arena_width = (-40.0, 40.0)
+        # self.arena_length = (-60.0, 60.0)
+        self.arena_length = (-10.0, 10.0)
+        # self.arena_width = (-40.0, 40.0)
+        self.arena_width = (-10.0, 10.0)
 
         # 2D delta to task in root space
         target_dim = 2
