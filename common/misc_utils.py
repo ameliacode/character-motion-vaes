@@ -186,7 +186,7 @@ class EpisodeRunner(object):
         runner = self
 
         def new_reset(self, indices=None):
-            return old_reset_func(indices)
+            return self.env.reset(indices)
 
         self.env.reset = types.MethodType(new_reset, self.env)
 

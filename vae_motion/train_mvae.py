@@ -215,7 +215,7 @@ def main():
 
     raw_data = np.load(args.mocap_file)
     mocap_data = torch.from_numpy(raw_data["data"]).float().to(args.device)
-    end_indices = raw_data["end_indices"] - 1 # T pose discarded
+    end_indices = raw_data["end_indices"] - 1# T pose discarded
     # print(len(mocap_data), end_indices)
 
     max = mocap_data.max(dim=0)[0]
