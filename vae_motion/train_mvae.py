@@ -145,7 +145,7 @@ def main():
         required=False,
     )
     parser.add_argument(
-        "--num_embeddings",
+        "--num_embeddings",# no need to
         type=int,
         default=12,
         required=False,
@@ -177,7 +177,7 @@ def main():
     parser.add_argument(
         "--kl_beta",
         type=float,
-        default=1.0,
+        default=0.4, #0.4
         required=False
     )
     parser.add_argument(
@@ -215,7 +215,7 @@ def main():
 
     raw_data = np.load(args.mocap_file)
     mocap_data = torch.from_numpy(raw_data["data"]).float().to(args.device)
-    end_indices = raw_data["end_indices"] - 1# T pose discarded
+    end_indices = raw_data["end_indices"] - 1 # T pose discarded
     # print(len(mocap_data), end_indices)
 
     max = mocap_data.max(dim=0)[0]
@@ -330,6 +330,7 @@ def main():
             args.mini_batch_size,
             drop_last=True,
         )
+
         ep_recon_loss = 0
         ep_kl_loss = 0
         ep_perplexity = 0

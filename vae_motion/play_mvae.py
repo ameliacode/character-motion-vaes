@@ -85,6 +85,7 @@ def test_vae_replay_full_motion(args):
                     env.reset(reset_indices)
 
                 if info.get("reset"):
+                    print("Reset")
                     env.reset()
 
 

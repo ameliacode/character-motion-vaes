@@ -17,6 +17,7 @@ from common.misc_utils import line_to_point_distance
 from environments.mocap_renderer import extract_joints_xyz
 
 import pdb
+import scipy.ndimage.filters as filters
 
 FOOT2METER = 0.3048
 METER2FOOT = 1 / 0.3048
@@ -44,7 +45,7 @@ class EnvBase(gym.Env):
         self.load_data(pose_vae_path)
 
         self.action_scale = 4.0
-        self.data_fps = 120
+        self.data_fps = 30 #CMU
         self.frame_dim = self.mocap_data.shape[1]
         self.num_condition_frames = self.pose_vae_model.num_condition_frames
 
@@ -58,7 +59,7 @@ class EnvBase(gym.Env):
         self.max_timestep = int(1200 / self.frame_skip)
 
         # history size is used to calculate floating as well
-        self.history_size = 5
+        self.history_size = 11
         assert (
             self.history_size >= self.num_condition_frames
         ), "History size has to be greater than condition size."
@@ -83,15 +84,17 @@ class EnvBase(gym.Env):
 
         # 4 and 7 are height for right and left toes respectively
         # y-axis in the data, but z-axis in the env
-        self.foot_xy_ind = torch.LongTensor([[30, 32], [15, 17]]) # joint index
-        self.foot_z_ind = torch.LongTensor([31, 16])
+        # self.foot_xy_ind = torch.LongTensor([[30, 32], [15, 17]]) # joint index refactored #CMU
+        self.foot_xy_ind = torch.LongTensor([[24, 26], [12, 14]]) # joint index refactored #[30,32],[15,17]
+        # self.foot_z_ind = torch.LongTensor([31, 16]) # joint index refactored #CMU
+        self.foot_z_ind = torch.LongTensor([25, 13]) # joint index refactored #[31,16]
         self.contact_threshold = 0.03 * METER2FOOT
         self.foot_pos_history = torch.zeros((self.num_parallel, 2, 6)).to(self.device)
 
-        indices = torch.arange(0, 96).long().to(self.device)
-        x_indices = indices[slice(3, 96, 3)]
-        y_indices = indices[slice(4, 96, 3)]
-        z_indices = indices[slice(5, 96, 3)]
+        indices = torch.arange(0, 69).long().to(self.device) #96 | CMU #69 | LFAN
+        x_indices = indices[slice(3, 69, 3)] #96
+        y_indices = indices[slice(4, 69, 3)] #96
+        z_indices = indices[slice(5, 69, 3)] #96
         self.joint_indices = (x_indices, y_indices, z_indices)
 
         if self.is_rendered:
@@ -141,10 +144,9 @@ class EnvBase(gym.Env):
 
     def integrate_root_translation(self, pose):
         mat = self.get_rotation_matrix(self.root_facing)
-        displacement = (mat * pose[:, 0:2].unsqueeze(1)).sum(dim=2)
+        self.displacement = (mat * pose[:, 0:2].unsqueeze(1)).sum(dim=2)
         self.root_facing.add_(pose[:, [2]]).remainder_(2 * np.pi)
-        self.root_xz.add_(displacement)
-
+        self.root_xz.add_(self.displacement)
         self.history = self.history.roll(1, dims=1)
         self.history[:, 0].copy_(pose)
 
@@ -199,7 +201,7 @@ class EnvBase(gym.Env):
     def reset_initial_frames(self, frame_index=None):
         # Make sure condition_range doesn't blow up
         self.start_indices.random_(
-            0, self.mocap_data.shape[0] - self.num_condition_frames + 1
+           0, self.mocap_data.shape[0] - self.num_condition_frames + 1
         )
 
         if self.is_rendered:
@@ -221,7 +223,6 @@ class EnvBase(gym.Env):
             self.start_indices.repeat((self.num_condition_frames, 1)).t()
             + torch.arange(self.num_condition_frames - 1, -1, -1).long()
         )
-
         self.history[:, : self.num_condition_frames].copy_(
             self.mocap_data[condition_range]
         )
@@ -245,6 +246,8 @@ class EnvBase(gym.Env):
         displacement = self.foot_pos_history[:, 0] - self.foot_pos_history[:, 1]
         displacement = displacement[:, [[0, 1], [3, 4]]].norm(dim=-1)
 
+
+
         foot_slide = displacement.mul(
             2 - 2 ** (foot_z.max(dim=1)[0] / self.contact_threshold).clamp_(0, 1)
         )
@@ -255,7 +258,7 @@ class EnvBase(gym.Env):
         action_energy = (
             next_frame[:, [0, 1]].pow(2).sum(1)
             + next_frame[:, 2].pow(2)
-            + next_frame[:, 69:135].pow(2).mean(1)
+            + next_frame[:, 69:135].pow(2).mean(1) # this needs to be refactored # LAFAN | 69:135 # CMU | 96:189
         )
         return -0.8 * action_energy.unsqueeze(dim=1)
 
@@ -388,7 +391,7 @@ class RandomWalkEnv(EnvBase):
 
         current_frame = self.history[:, 0]
         pose_data = torch.cat(
-            (current_frame[:, 0:69], current_frame[:, 135:267]), dim=-1
+            (current_frame[:, 0:69], current_frame[:, 135:267]), dim=-1 # this has to be refactored # 0:69 135:267 # 0:96 189:375
         )
 
         data_dict = {
@@ -480,24 +483,25 @@ class TargetEnv(EnvBase):
             # value bigger than contact_threshold
             self.foot_pos_history.index_fill_(dim=0, index=indices, value=1)
 
+        self.facing = np.array([0,0,1])
         obs_components = self.get_observation_components()
         return torch.cat(obs_components, dim=1)
 
     def reset_target(self, indices=None, location=None):
-        if location is None:
-            if indices is None:
-                self.target[:, 0].uniform_(*self.arena_length)
-                self.target[:, 1].uniform_(*self.arena_width)
-            else:
-                # if indices is a pytorch tensor, this returns a new storage
-                new_lengths = self.target[indices, 0].uniform_(*self.arena_length)
-                self.target[:, 0].index_copy_(dim=0, index=indices, source=new_lengths)
-                new_widths = self.target[indices, 1].uniform_(*self.arena_width)
-                self.target[:, 1].index_copy_(dim=0, index=indices, source=new_widths)
-        else:
-            # Reaches this branch only with mouse click in render mode
-            self.target[:, 0] = location[0]
-            self.target[:, 1] = location[1]
+        # if location is None:
+        #     if indices is None:
+        #         self.target[:, 0].uniform_(*self.arena_length)
+        #         self.target[:, 1].uniform_(*self.arena_width)
+        #     else:
+        #         # if indices is a pytorch tensor, this returns a new storage
+        #         new_lengths = self.target[indices, 0].uniform_(*self.arena_length)
+        #         self.target[:, 0].index_copy_(dim=0, index=indices, source=new_lengths)
+        #         new_widths = self.target[indices, 1].uniform_(*self.arena_width)
+        #         self.target[:, 1].index_copy_(dim=0, index=indices, source=new_widths)
+        # else:
+        #     # Reaches this branch only with mouse click in render mode
+        #     self.target[:, 0] = location[0]
+        #     self.target[:, 1] = location[1]
 
         # l = np.random.uniform(*self.arena_length)
         # w = np.random.uniform(*self.arena_width)
@@ -505,11 +509,11 @@ class TargetEnv(EnvBase):
         # self.target[:, 1].fill_(100)
 
         # set target to be in front
-        # facing_delta = self.root_facing.clone().uniform_(-np.pi / 2, np.pi / 2)
-        # angle = self.root_facing + facing_delta
-        # distance = self.root_facing.clone().uniform_(20, 60)
-        # self.target[:, 0].copy_((distance * angle.cos()).squeeze(1))
-        # self.target[:, 1].copy_((distance * angle.sin()).squeeze(1))
+        facing_delta = self.root_facing.clone().uniform_(-np.pi / 2, np.pi / 2)
+        angle = self.root_facing + facing_delta
+        distance = self.root_facing.clone().uniform_(10, 20) #20, 60
+        self.target[:, 0].copy_((distance * angle.cos()).squeeze(1))
+        self.target[:, 1].copy_((distance * angle.sin()).squeeze(1))
 
         # Getting image
         # facing_delta = self.root_facing.clone().fill_(-np.pi / 6)
@@ -551,7 +555,7 @@ class TargetEnv(EnvBase):
         # Check if target is reached
         # Has to be done after new potentials are calculated
         target_dist = -self.linear_potential
-        target_is_close = target_dist < 2.0
+        target_is_close = target_dist < 3.0
 
         if is_external_step:
             self.reward.copy_(progress)
@@ -578,6 +582,18 @@ class TargetEnv(EnvBase):
         # Everytime this function is called, should call render
         # otherwise the fps will be wrong
         self.render()
+        if self.is_rendered:
+            from scipy.spatial.transform import Rotation as R
+            root_joint = torch.cat((self.root_xz, torch.Tensor([[0.0]])), dim=1).tolist()[0]
+            root_facing = (-self.root_facing).tolist()[0]
+            self.facing = R.from_euler('z', root_facing, degrees=False).as_matrix()[0] @ np.array([0, 1, 0])
+            self.viewer._p.addUserDebugLine(  # ACROSS
+                lineFromXYZ=[root_joint[0] * 0.3048, root_joint[1] * 0.3048, 0],
+                lineToXYZ=[root_joint[0] * 0.3048 + self.facing[0], root_joint[1] * 0.3048 + self.facing[1], 0],
+                lineColorRGB=(0, 0, 255),
+                lineWidth=2,
+                lifeTime=0.05,
+            )
 
         return (
             torch.cat(obs_components, dim=1),

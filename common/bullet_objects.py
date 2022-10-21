@@ -230,6 +230,7 @@ class FlagPole:
         base_path = os.path.join(current_dir, "data", "misc")
         # pole_path = os.path.join(base_path, "pole.obj")
         pole_path = os.path.join(base_path, "punchbag.obj")
+        # pole_path = os.path.join(base_path, "barrier.obj")
 
         shape = self._p.createVisualShapeArray(
             shapeTypes=[self._p.GEOM_MESH],
@@ -237,7 +238,7 @@ class FlagPole:
             fileNames=[pole_path, ""],
             rgbaColors=[self._rgba, self._rgba],
             visualFramePositions=[[0, 1.0, 0]],
-            meshScales=[[0.2, 0.2, 0.2]],
+            meshScales=[[0.25, 0.25, 0.25]],
         )
 
         id = self._p.createMultiBody(

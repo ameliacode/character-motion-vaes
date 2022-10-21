@@ -83,10 +83,13 @@ def main():
     # setup parameters
     args = SimpleNamespace(
         env_module="environments",
-        env_name="PunchingPlayerEnv-v0",
+        # env_name="CustomPunchingEnv-v0",
+        env_name="CustomTargetEnv-v0",
         # env_name="TargetEnv-v0",
+        # env_name="JoystickEnv-v0",
+        # env_name="PathFollowEnv-v0",
         device="cuda:0" if torch.cuda.is_available() else "cpu",
-        num_parallel=100,
+        num_parallel=500, # 100 in MVAE, 800 in CVAE, 4096 in ASE
         vae_path="models/",
         frame_skip=1,
         seed=16,
@@ -122,10 +125,10 @@ def main():
 
     # ppo parameters
     use_gae = True
-    entropy_coef = 0.0
-    value_loss_coef = 1.0
+    entropy_coef = 0.01 #0.0
+    value_loss_coef = 0.5 #1.0
     ppo_epoch = 10
-    gamma = 0.99
+    gamma = 0.995 #0.99
     gae_lambda = 0.95
     clip_param = 0.2
     max_grad_norm = 1.0
