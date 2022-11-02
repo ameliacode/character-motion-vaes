@@ -202,7 +202,7 @@ class MixedDecoder(nn.Module):
         return layer_out
 
 
-class PoseMixtureVAE(nn.Module):
+class PoseMixtureVAE(nn.Module): ## TRAIN
     def __init__(
         self,
         frame_size,

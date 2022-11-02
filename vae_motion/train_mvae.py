@@ -292,10 +292,13 @@ def main():
 
     if args.load_saved_model:
         pose_vae = torch.load(pose_vae_path, map_location=args.device)
-    pose_vae.train()
 
+    ##SUPERVISED LEARNING
+    pose_vae.train()
     vae_optimizer = optim.Adam(pose_vae.parameters(), lr=args.initial_lr)
 
+
+    ## SCHEDULE SAMPLING
     sample_schedule = torch.cat(
         (
             # First part is pure teacher forcing
@@ -339,6 +342,7 @@ def main():
             vae_optimizer, ep - 1, args.num_epochs, args.initial_lr, args.final_lr
         )
 
+        ## AUTOREGRESSIVE PREDICTION  / MINI-BATCH SUPERVISED LEARNING
         num_mini_batch = 1
         for num_mini_batch, indices in enumerate(sampler):
             t_indices = torch.LongTensor(indices)

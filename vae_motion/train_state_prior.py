@@ -10,16 +10,18 @@ from sklearn.decomposition import PCA
 
 from types import SimpleNamespace
 from pathlib import Path
+from matplotlib.pyplot import *
 
 current_dir = str(Path(__file__).resolve().parents[0])
-parent_dir = os.path.dirname(current_dir)
+parent_dir = str(Path(__file__).resolve().parents[1])
 sys.path.append(current_dir)
 
 def main():
-    env_path=os.path.joint(parent_dir, "environments")
+    env_path=os.path.join(str(parent_dir), "environments")
+    pfnn_path = os.path.join(env_path, "PFNN_data")
     args = SimpleNamespace(
         device="cuda:0" if torch.cuda.is_available() else "cpu",
-        mocap_file=os.path.join(env_path),
+        mocap_file=os.path.join(pfnn_path, "PFNN_mocap.npz"),
         save_dir=str(current_dir), # where all states and gmm
         train_states=None, # npy file with pre-loaded train states
         visualize_results=False, # MAYBE LATER
@@ -27,22 +29,11 @@ def main():
         gmm_comps=12
     )
 
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
-
-    all_states_out_path = os.path.join(args.save_dir, "train_states.npy")
     gmm_out_path = os.path.join(args.save_dir, "prior_gmm.npz") # for fitting.py, gmm prior over initial state of the sequence
 
-    all_states = None
-
-    if args.train_states is not None:
-        pass # MAYBE LATER
-    else:
-        mocap_file = 0
-
-        # load data and input all state variable
-
-    start_t = time.time()
+    raw_data = np.load(args.mocap_file)
+    mocap_data = torch.from_numpy(raw_data["data"]).float().to(args.device)
+    all_states = mocap_data
 
     print("Fitting GMM with %d components..." %(args.gmm_comps))
     gmm = GaussianMixture(n_components=args.gmm_comps,
@@ -57,7 +48,7 @@ def main():
                           precisions_init=None,
                           random_state=0,
                           warm_start=False,
-                          verbsose=1,
+                          verbose=1,
                           verbose_interval=5
                           )
 
@@ -70,13 +61,6 @@ def main():
 
     # save distribution information
     np.savez(gmm_out_path, weights=gmm.weights_, means=gmm.means_, covariances=gmm.covariances_)
-
-    print("GMM time: %f s" % (time.time() - start_t))
-
-    # print("Running evaluation on test set ...")
-    # test_results(args.data, gmm_out_path)
-    # print("Visualizing sampled results")
-    # vis_gmm_fit_results(gmm_out_path, debug_gmm_obj=gmm, debug_data=all_states)
 
 
 def load_gmm_results(gmm_path):
@@ -92,18 +76,16 @@ def build_pytorch_gmm(gmm_weights, gmm_means, gmm_covs):
     gmm_distrib = MixtureSameFamily(mix, comp)
     return gmm_distrib
 
-def viz_gmm_fit_results(gmm_path, debug_gmm_obj=None, debug_data=None):
-    pass
-
-def test_results(data_path, gmm_path): # Evaluate likelihood of test data
-
-    # load in GMM result
+def visualize_results(data_path, gmm_path): # Evaluate likelihood of test data
     gmm_weights, gmm_means, gmm_covs = load_gmm_results(gmm_path)
-
-    # build pytorch distrib
     gmm_distrib = build_pytorch_gmm(gmm_weights, gmm_means, gmm_covs)
 
-    # MAYBE LATER
+    num_samples = 100
+    sample_states = gmm_distrib.sample(torch.Size([num_samples]))
+
+    num_samples = gmm_means.shape[0]
+    sample_states = torch.from_numpy(gmm_means)
+    torch_logprob = gmm_distrib.logprob(sample_states)
 
 
 if __name__=="__main__":
